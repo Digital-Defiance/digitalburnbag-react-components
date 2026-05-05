@@ -75,6 +75,7 @@ import type { IUploadProgress } from '../components/UploadWidget';
 import { UploadWidget } from '../components/UploadWidget';
 import { VaultPicker } from '../components/VaultPicker';
 import { JouleUploadForm } from '../components/joule';
+import { decryptAuthenticatedUserFile, encryptFileForUpload } from '../crypto';
 import type {
   IApiCanaryBindingDTO,
   IApiFileDTO,
@@ -122,6 +123,13 @@ export interface IBurnbagPageProps {
    * update the URL bar with the virtual path.
    */
   onFolderNavigate?: (breadcrumbs: IBreadcrumbSegment[]) => void;
+  /**
+   * Returns the user's wallet private key for client-side E2EE file
+   * decryption. When provided, downloads use the encrypted endpoint
+   * and decrypt in the browser. When absent, falls back to the
+   * server-decrypted download.
+   */
+  getPrivateKey?: () => Uint8Array | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -182,6 +190,7 @@ export const BurnbagPage: React.FC<IBurnbagPageProps> = ({
   onSectionChange,
   initialPath,
   onFolderNavigate,
+  getPrivateKey,
 }) => {
   const { tBranded: t } = useI18n();
   const getTokenRef = useRef(getToken);
@@ -920,6 +929,33 @@ export const BurnbagPage: React.FC<IBurnbagPageProps> = ({
             });
             return;
           }
+          const privateKey = getPrivateKey?.();
+          if (privateKey) {
+            try {
+              const enc = await api.getEncryptedFileContent(firstId);
+              if (enc.encryptedSymmetricKey) {
+                const plaintext = await decryptAuthenticatedUserFile(
+                  enc.encryptedSymmetricKey,
+                  enc.encryptedContent,
+                  enc.iv,
+                  enc.authTag,
+                  privateKey,
+                );
+                const blob = new Blob([plaintext.buffer as ArrayBuffer], {
+                  type: enc.mimeType,
+                });
+                const encUrl = URL.createObjectURL(blob);
+                const encA = document.createElement('a');
+                encA.href = encUrl;
+                encA.download = enc.fileName;
+                encA.click();
+                URL.revokeObjectURL(encUrl);
+                break;
+              }
+            } catch {
+              // Fall through to unencrypted download on decryption failure
+            }
+          }
           const downloadUrl = await api.getDownloadBlobUrl(firstId);
           const a = document.createElement('a');
           a.href = downloadUrl;
@@ -1017,31 +1053,98 @@ export const BurnbagPage: React.FC<IBurnbagPageProps> = ({
           if (!currentFolderId) {
             throw new Error(t(DigitalBurnbagStrings.Page_LoadFolderFailed));
           }
-          const session = await api.initUpload(
-            file.name,
-            file.type || 'application/octet-stream',
-            file.size,
-            currentFolderId,
-            selectedVaultId ?? undefined,
-          );
 
-          const { chunkSize, totalChunks, sessionId } = session;
+          const privateKey = getPrivateKey?.();
 
-          for (let i = 0; i < totalChunks; i++) {
-            const start = i * chunkSize;
-            const end = Math.min(start + chunkSize, file.size);
-            const chunk = await file.slice(start, end).arrayBuffer();
-            const checksum = computeChunkChecksum(chunk);
+          let session;
+          let uploadSource: Uint8Array | null = null;
+          let chunkSize: number;
+          let totalChunks: number;
+          let sessionId: string;
 
-            const result = await api.uploadChunk(sessionId, i, chunk, checksum);
+          if (privateKey) {
+            // ── E2EE path: encrypt the whole file client-side first ──
+            const fileBuffer = await file.arrayBuffer();
+            const { ciphertext, ivB64, authTagB64, wrappedKeyB64 } =
+              await encryptFileForUpload(
+                new Uint8Array(fileBuffer),
+                privateKey,
+              );
 
-            setUploadProgress((prev) =>
-              prev.map((p) =>
-                p.fileName === file.name
-                  ? { ...p, progress: Math.round(result.progress * 100) }
-                  : p,
-              ),
+            uploadSource = ciphertext;
+
+            session = await api.initUpload(
+              file.name,
+              file.type || 'application/octet-stream',
+              ciphertext.length,
+              currentFolderId,
+              selectedVaultId ?? undefined,
+              undefined,
+              undefined,
+              { wrappedKeyB64, ivB64, authTagB64 },
             );
+
+            chunkSize = session.chunkSize;
+            totalChunks = session.totalChunks;
+            sessionId = session.sessionId;
+
+            for (let i = 0; i < totalChunks; i++) {
+              const start = i * chunkSize;
+              const end = Math.min(start + chunkSize, uploadSource.length);
+              const chunk = uploadSource.slice(start, end)
+                .buffer as ArrayBuffer;
+              const checksum = computeChunkChecksum(chunk);
+
+              const result = await api.uploadChunk(
+                sessionId,
+                i,
+                chunk,
+                checksum,
+              );
+
+              setUploadProgress((prev) =>
+                prev.map((p) =>
+                  p.fileName === file.name
+                    ? { ...p, progress: Math.round(result.progress * 100) }
+                    : p,
+                ),
+              );
+            }
+          } else {
+            // ── Plaintext path: stream file chunks directly ──
+            session = await api.initUpload(
+              file.name,
+              file.type || 'application/octet-stream',
+              file.size,
+              currentFolderId,
+              selectedVaultId ?? undefined,
+            );
+
+            chunkSize = session.chunkSize;
+            totalChunks = session.totalChunks;
+            sessionId = session.sessionId;
+
+            for (let i = 0; i < totalChunks; i++) {
+              const start = i * chunkSize;
+              const end = Math.min(start + chunkSize, file.size);
+              const chunk = await file.slice(start, end).arrayBuffer();
+              const checksum = computeChunkChecksum(chunk);
+
+              const result = await api.uploadChunk(
+                sessionId,
+                i,
+                chunk,
+                checksum,
+              );
+
+              setUploadProgress((prev) =>
+                prev.map((p) =>
+                  p.fileName === file.name
+                    ? { ...p, progress: Math.round(result.progress * 100) }
+                    : p,
+                ),
+              );
+            }
           }
 
           await api.finalizeUpload(sessionId);
@@ -1082,30 +1185,68 @@ export const BurnbagPage: React.FC<IBurnbagPageProps> = ({
         );
       }, 3000);
     },
-    [api, currentFolderId, selectedVaultId, loadFolderContents, loadVaults, t],
+    [
+      api,
+      currentFolderId,
+      getPrivateKey,
+      selectedVaultId,
+      loadFolderContents,
+      loadVaults,
+      t,
+    ],
   );
 
   const handleUploadNewVersion = useCallback(
     async (fileId: string, file: File) => {
-      const session = await api.initUploadNewVersion(
-        fileId,
-        file.type || 'application/octet-stream',
-        file.size,
-        file.name,
-      );
-      const { chunkSize, totalChunks, sessionId } = session;
-      for (let i = 0; i < totalChunks; i++) {
-        const start = i * chunkSize;
-        const end = Math.min(start + chunkSize, file.size);
-        const chunk = await file.slice(start, end).arrayBuffer();
-        const checksum = computeChunkChecksum(chunk);
-        await api.uploadChunk(sessionId, i, chunk, checksum);
+      const privateKey = getPrivateKey?.();
+
+      if (privateKey) {
+        // ── E2EE path ──
+        const fileBuffer = await file.arrayBuffer();
+        const { ciphertext, ivB64, authTagB64, wrappedKeyB64 } =
+          await encryptFileForUpload(new Uint8Array(fileBuffer), privateKey);
+
+        const session = await api.initUploadNewVersion(
+          fileId,
+          file.type || 'application/octet-stream',
+          ciphertext.length,
+          file.name,
+          { wrappedKeyB64, ivB64, authTagB64 },
+        );
+
+        const { chunkSize, totalChunks, sessionId } = session;
+
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * chunkSize;
+          const end = Math.min(start + chunkSize, ciphertext.length);
+          const chunk = ciphertext.slice(start, end).buffer as ArrayBuffer;
+          const checksum = computeChunkChecksum(chunk);
+          await api.uploadChunk(sessionId, i, chunk, checksum);
+        }
+        await api.finalizeUpload(sessionId);
+      } else {
+        // ── Plaintext path ──
+        const session = await api.initUploadNewVersion(
+          fileId,
+          file.type || 'application/octet-stream',
+          file.size,
+          file.name,
+        );
+        const { chunkSize, totalChunks, sessionId } = session;
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * chunkSize;
+          const end = Math.min(start + chunkSize, file.size);
+          const chunk = await file.slice(start, end).arrayBuffer();
+          const checksum = computeChunkChecksum(chunk);
+          await api.uploadChunk(sessionId, i, chunk, checksum);
+        }
+        await api.finalizeUpload(sessionId);
       }
-      await api.finalizeUpload(sessionId);
+
       showSnack(t(DigitalBurnbagStrings.Upload_NewVersionSuccess), 'success');
       loadFolderContents(currentFolderId);
     },
-    [api, currentFolderId, loadFolderContents, showSnack, t],
+    [api, currentFolderId, getPrivateKey, loadFolderContents, showSnack, t],
   );
 
   // -- Joule upload handlers -------------------------------------------------
@@ -1823,6 +1964,35 @@ export const BurnbagPage: React.FC<IBurnbagPageProps> = ({
               fetchContentUrl={() => api.getPreviewBlobUrl(previewFile.id)}
               onClose={() => setPreviewFile(null)}
               onDownload={async () => {
+                const previewPrivateKey = getPrivateKey?.();
+                if (previewPrivateKey) {
+                  try {
+                    const enc = await api.getEncryptedFileContent(
+                      previewFile.id,
+                    );
+                    if (enc.encryptedSymmetricKey) {
+                      const plaintext = await decryptAuthenticatedUserFile(
+                        enc.encryptedSymmetricKey,
+                        enc.encryptedContent,
+                        enc.iv,
+                        enc.authTag,
+                        previewPrivateKey,
+                      );
+                      const blob = new Blob([plaintext.buffer as ArrayBuffer], {
+                        type: enc.mimeType,
+                      });
+                      const encUrl = URL.createObjectURL(blob);
+                      const encA = document.createElement('a');
+                      encA.href = encUrl;
+                      encA.download = enc.fileName;
+                      encA.click();
+                      URL.revokeObjectURL(encUrl);
+                      return;
+                    }
+                  } catch {
+                    // Fall through to unencrypted download on decryption failure
+                  }
+                }
                 const url = await api.getDownloadBlobUrl(previewFile.id);
                 const a = document.createElement('a');
                 a.href = url;
@@ -2023,13 +2193,44 @@ export const BurnbagPage: React.FC<IBurnbagPageProps> = ({
                 } else if (pending.action === 'preview') {
                   setPreviewFile(pending.item);
                 } else if (pending.action === 'download') {
-                  void api.getDownloadBlobUrl(pending.itemId).then((url) => {
+                  void (async () => {
+                    const pendingPrivateKey = getPrivateKey?.();
+                    if (pendingPrivateKey) {
+                      try {
+                        const enc = await api.getEncryptedFileContent(
+                          pending.itemId,
+                        );
+                        if (enc.encryptedSymmetricKey) {
+                          const plaintext = await decryptAuthenticatedUserFile(
+                            enc.encryptedSymmetricKey,
+                            enc.encryptedContent,
+                            enc.iv,
+                            enc.authTag,
+                            pendingPrivateKey,
+                          );
+                          const blob = new Blob(
+                            [plaintext.buffer as ArrayBuffer],
+                            { type: enc.mimeType },
+                          );
+                          const encUrl = URL.createObjectURL(blob);
+                          const encA = document.createElement('a');
+                          encA.href = encUrl;
+                          encA.download = enc.fileName;
+                          encA.click();
+                          URL.revokeObjectURL(encUrl);
+                          return;
+                        }
+                      } catch {
+                        // Fall through to unencrypted download on decryption failure
+                      }
+                    }
+                    const url = await api.getDownloadBlobUrl(pending.itemId);
                     const a = document.createElement('a');
                     a.href = url;
                     a.download = pending.item.name;
                     a.click();
                     URL.revokeObjectURL(url);
-                  });
+                  })();
                 }
               }}
             />

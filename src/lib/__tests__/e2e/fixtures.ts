@@ -197,6 +197,17 @@ export class BurnbagTestApi {
     });
   }
 
+  async getEncryptedFileContent(fileId: string) {
+    return this.request<{
+      fileName: string;
+      mimeType: string;
+      encryptedContent: string;
+      iv: string;
+      authTag: string;
+      encryptedSymmetricKey: string;
+    }>(`/files/${fileId}/encrypted`);
+  }
+
   async softDeleteFile(fileId: string) {
     return this.request<void>(`/files/${fileId}`, { method: 'DELETE' });
   }

@@ -6,6 +6,8 @@
  * sees the plaintext symmetric key or file content.
  */
 
+import { BlockECIES } from '@brightchain/brightchain-lib';
+
 /**
  * Extract the ephemeral private key from the URL fragment.
  * The fragment is never sent to the server by the browser.
@@ -149,4 +151,66 @@ export async function decryptEphemeralShare(
     senderPublicKeyRaw,
   );
   return decryptFileContent(encryptedContent, symmetricKey);
+}
+
+/**
+ * Decode a base64 string to Uint8Array.
+ */
+function b64ToBytes(b64: string): Uint8Array {
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
+/**
+ * Full E2EE download for authenticated wallet users.
+ *
+ * Uses BlockECIES (ECIES + secp256k1) to unwrap the per-file symmetric
+ * key, then AES-256-GCM to decrypt the file content — everything happens
+ * in the browser and the plaintext never leaves the client.
+ *
+ * @param encryptedSymmetricKeyB64 - Base64-encoded ECIES-wrapped symmetric key
+ * @param encryptedContentB64 - Base64-encoded AES-256-GCM ciphertext
+ * @param ivB64 - Base64-encoded 12-byte IV
+ * @param authTagB64 - Base64-encoded 16-byte authentication tag
+ * @param userPrivateKey - The wallet private key (from wallet.getPrivateKey())
+ * @returns Decrypted file bytes
+ */
+export async function decryptAuthenticatedUserFile(
+  encryptedSymmetricKeyB64: string,
+  encryptedContentB64: string,
+  ivB64: string,
+  authTagB64: string,
+  userPrivateKey: Uint8Array,
+): Promise<Uint8Array> {
+  // Unwrap the symmetric key using ECIES
+  const encryptedSymmetricKey = b64ToBytes(encryptedSymmetricKeyB64);
+  const symmetricKeyBytes = await BlockECIES.decrypt(
+    userPrivateKey,
+    encryptedSymmetricKey,
+  );
+
+  // AES-256-GCM decrypt the file content (Web Crypto, same as server-side)
+  const encryptedContent = b64ToBytes(encryptedContentB64);
+  const iv = b64ToBytes(ivB64);
+  const authTag = b64ToBytes(authTagB64);
+
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    symmetricKeyBytes.buffer as ArrayBuffer,
+    { name: 'AES-GCM' },
+    false,
+    ['decrypt'],
+  );
+
+  // Web Crypto expects ciphertext + authTag concatenated
+  const combined = new Uint8Array(encryptedContent.length + authTag.length);
+  combined.set(encryptedContent, 0);
+  combined.set(authTag, encryptedContent.length);
+
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer, tagLength: 128 },
+    cryptoKey,
+    combined.buffer as ArrayBuffer,
+  );
+
+  return new Uint8Array(decrypted);
 }

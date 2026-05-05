@@ -197,3 +197,41 @@ export * from './joule';
 
 export { SealBreakWarningDialog } from './SealBreakWarningDialog';
 export type { ISealBreakWarningDialogProps } from './SealBreakWarningDialog';
+
+// Canary Provider Expansion Components
+export { ProviderMarketplace } from './ProviderMarketplace';
+export type { IProviderMarketplaceProps } from './ProviderMarketplace';
+
+export { ProviderHealthGrid, computeHealthPercentages, sortConnections } from './ProviderHealthGrid';
+export type {
+  IHealthPercentages,
+  IProviderConnectionExtendedForGrid,
+  IProviderHealthGridProps,
+  SortCriterion,
+  ViewMode,
+} from './ProviderHealthGrid';
+
+export { CanaryContextMenu } from './CanaryContextMenu';
+export type { ICanaryBinding, ICanaryContextMenuProps, ICanaryContextMenuTarget } from './CanaryContextMenu';
+
+export { CanaryLeftMenu, classifySystemHealth, computeSystemHealth, getAttentionNeededCount } from './CanaryLeftMenu';
+export type { CanarySystemHealth, ICanaryLeftMenuProps, IMultiCanaryBindingSummary, IWebhookEndpointSummary } from './CanaryLeftMenu';
+
+export { MultiCanaryBindingPanel, getBindingDisplayInfo } from './MultiCanaryBindingPanel';
+export type { IBindingDisplayInfo, IMultiCanaryBinding, IMultiCanaryBindingPanelProps, IMultiCanaryTarget, RedundancyPolicy } from './MultiCanaryBindingPanel';
+
+export { WebhookEndpointPanel } from './WebhookEndpointPanel';
+export type { IDeliveryDataPoint, IWebhookDeliveryStats, IWebhookEndpointDisplay, IWebhookEndpointPanelProps } from './WebhookEndpointPanel';
+
+export { ActivationFlow } from './ActivationFlow';
+export type { IActivationFlowProps, IActivationFlowProvider } from './ActivationFlow';
+
+export { ProviderLifecycleActions, shouldShowDisconnectWarning, shouldShowBelowMinimumWarning } from './ProviderLifecycleActions';
+export type { IDisconnectImpactReport, IProviderLifecycleActionsProps, IProviderLifecycleBinding, IProviderLifecycleConnection } from './ProviderLifecycleActions';
+
+export { CanaryProviderPage } from './CanaryProviderPage';
+export type { CanaryPageSection, ICanaryProviderPageProps } from './CanaryProviderPage';
+
+export { CanaryFileBrowserIntegration, useCanaryContextMenu } from './CanaryFileBrowserIntegration';
+export type { ICanaryFileBrowserIntegrationProps, ICanaryFileBrowserIntegrationComponentProps, IUseCanaryContextMenuResult } from './CanaryFileBrowserIntegration';
+

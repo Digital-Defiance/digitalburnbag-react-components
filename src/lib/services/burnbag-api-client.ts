@@ -223,6 +223,49 @@ export interface IApiDestructionProofDTO {
 
 // -- Provider Registration DTOs --
 
+export interface IApiMultiCanaryBindingDTO {
+  id: string;
+  name: string;
+  providerConnectionIds: string[];
+  redundancyPolicy: string;
+  providerWeights?: Record<string, number>;
+  weightedThresholdPercent?: number;
+  protocolAction: string;
+  canaryCondition: string;
+  absenceThresholdHours: number;
+  aggregateStatus: string;
+  providerSignals?: Record<string, string>;
+  targetNames: string[];
+  providerCount: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IApiWebhookEndpointDTO {
+  id: string;
+  connectionId: string;
+  providerId: string;
+  providerName: string;
+  webhookUrl: string;
+  secret: string;
+  isActive: boolean;
+  isDisabledByFailures: boolean;
+  ipAllowlist: string[];
+  rateLimitPerMinute: number;
+  stats: IApiWebhookDeliveryStatsDTO;
+  lastReceivedAt?: string;
+  createdAt: string;
+}
+
+export interface IApiWebhookDeliveryStatsDTO {
+  totalReceived: number;
+  successfullyProcessed: number;
+  failedValidation: number;
+  lastReceivedAt?: string;
+  lastSuccessAt?: string;
+}
+
 export interface IApiProviderDisplayInfoDTO {
   id: string;
   name: string;
@@ -515,6 +558,22 @@ export class BurnbagApiClient {
     return this.fetchBlobUrl(`/files/${fileId}`);
   }
 
+  /**
+   * Fetch encrypted file content for client-side E2EE decryption.
+   * Returns base64-encoded ciphertext components and the ECIES-wrapped
+   * symmetric key for the requesting user.
+   */
+  async getEncryptedFileContent(fileId: string): Promise<{
+    fileName: string;
+    mimeType: string;
+    encryptedContent: string;
+    iv: string;
+    authTag: string;
+    encryptedSymmetricKey: string;
+  }> {
+    return this.request(`/files/${fileId}/encrypted`);
+  }
+
   async getNonAccessProof(fileId: string): Promise<unknown> {
     return this.request(`/files/${fileId}/non-access-proof`);
   }
@@ -529,6 +588,11 @@ export class BurnbagApiClient {
     vaultContainerId?: string,
     durabilityTier?: import('@brightchain/digitalburnbag-lib').BurnbagStorageTier,
     durationDays?: number,
+    preEncryptedMeta?: {
+      wrappedKeyB64: string;
+      ivB64: string;
+      authTagB64: string;
+    },
   ): Promise<IApiUploadSessionDTO> {
     return this.request('/upload/init', {
       method: 'POST',
@@ -540,6 +604,11 @@ export class BurnbagApiClient {
         vaultContainerId,
         ...(durabilityTier !== undefined && { durabilityTier }),
         ...(durationDays !== undefined && { durationDays }),
+        ...(preEncryptedMeta !== undefined && {
+          wrappedKeyB64: preEncryptedMeta.wrappedKeyB64,
+          ivB64: preEncryptedMeta.ivB64,
+          authTagB64: preEncryptedMeta.authTagB64,
+        }),
       }),
     });
   }
@@ -587,6 +656,11 @@ export class BurnbagApiClient {
     mimeType: string,
     sizeBytes: number,
     fileName?: string,
+    preEncryptedMeta?: {
+      wrappedKeyB64: string;
+      ivB64: string;
+      authTagB64: string;
+    },
   ): Promise<IApiUploadSessionDTO> {
     return this.request('/upload/new-version', {
       method: 'POST',
@@ -595,6 +669,11 @@ export class BurnbagApiClient {
         fileName,
         mimeType,
         totalSizeBytes: sizeBytes,
+        ...(preEncryptedMeta !== undefined && {
+          wrappedKeyB64: preEncryptedMeta.wrappedKeyB64,
+          ivB64: preEncryptedMeta.ivB64,
+          authTagB64: preEncryptedMeta.authTagB64,
+        }),
       }),
     });
   }
@@ -892,10 +971,49 @@ export class BurnbagApiClient {
 
   /**
    * Disconnect (remove) a provider connection.
+   * Deletes credentials, removes from all multi-canary bindings, archives status history.
    */
   async disconnectProvider(connectionId: string): Promise<void> {
     return this.request(`/canary/connections/${connectionId}`, {
       method: 'DELETE',
+    });
+  }
+
+  /**
+   * Pause a provider connection.
+   * Stops heartbeat checks, excludes from aggregation, preserves credentials.
+   * Requirements: 16.2
+   */
+  async pauseProvider(connectionId: string): Promise<IApiProviderConnectionDTO> {
+    return this.request(`/canary/connections/${connectionId}/pause`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Resume a paused provider connection.
+   * Restarts heartbeat checks and re-includes in aggregation.
+   * Requirements: 16.2
+   */
+  async resumeProvider(connectionId: string): Promise<IApiProviderConnectionDTO> {
+    return this.request(`/canary/connections/${connectionId}/resume`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Get the impact report for disconnecting a provider.
+   * Returns which multi-canary bindings would be affected and whether any
+   * would fall below the minimum provider count.
+   * Requirements: 16.5, 16.6
+   */
+  async getDisconnectImpact(connectionId: string): Promise<{
+    affectedBindings: Array<{ id: string; name: string; providerCount: number }>;
+    bindingsReducedBelowMinimum: Array<{ id: string; name: string; providerCount: number }>;
+    bindingsStillValid: Array<{ id: string; name: string; providerCount: number }>;
+  }> {
+    return this.request(`/canary/connections/${connectionId}/disconnect-impact`, {
+      method: 'GET',
     });
   }
 
@@ -1284,6 +1402,161 @@ export class BurnbagApiClient {
     anchor.click();
     document.body.removeChild(anchor);
     URL.revokeObjectURL(blobUrl);
+  }
+
+  // -- Multi-Canary Bindings -------------------------------------------------
+
+  /**
+   * Get all multi-canary bindings for the current user.
+   */
+  async getMultiCanaryBindings(): Promise<IApiMultiCanaryBindingDTO[]> {
+    return this.request('/multi-canary-bindings');
+  }
+
+  /**
+   * Get a specific multi-canary binding by ID.
+   */
+  async getMultiCanaryBinding(bindingId: string): Promise<IApiMultiCanaryBindingDTO> {
+    return this.request(`/multi-canary-bindings/${bindingId}`);
+  }
+
+  /**
+   * Create a new multi-canary binding.
+   */
+  async createMultiCanaryBinding(params: {
+    name: string;
+    providerConnectionIds: string[];
+    targetIds: string[];
+    redundancyPolicy: string;
+    providerWeights?: Record<string, number>;
+    weightedThresholdPercent?: number;
+    protocolAction: string;
+    canaryCondition: string;
+    absenceThresholdHours: number;
+  }): Promise<IApiMultiCanaryBindingDTO> {
+    return this.request('/multi-canary-bindings', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  /**
+   * Update a multi-canary binding.
+   */
+  async updateMultiCanaryBinding(
+    bindingId: string,
+    updates: Record<string, unknown>,
+  ): Promise<IApiMultiCanaryBindingDTO> {
+    return this.request(`/multi-canary-bindings/${bindingId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  /**
+   * Delete a multi-canary binding.
+   */
+  async deleteMultiCanaryBinding(bindingId: string): Promise<void> {
+    return this.request(`/multi-canary-bindings/${bindingId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Get multi-canary bindings for a specific target.
+   */
+  async getMultiCanaryBindingsForTarget(targetId: string): Promise<IApiMultiCanaryBindingDTO[]> {
+    return this.request(`/multi-canary-bindings/target/${targetId}`);
+  }
+
+  // -- Webhook Endpoints -----------------------------------------------------
+
+  /**
+   * Get all webhook endpoints for the current user.
+   */
+  async getWebhookEndpoints(): Promise<IApiWebhookEndpointDTO[]> {
+    return this.request('/webhook-endpoints');
+  }
+
+  /**
+   * Create a webhook endpoint for a provider connection.
+   */
+  async createWebhookEndpoint(connectionId: string): Promise<IApiWebhookEndpointDTO> {
+    return this.request('/webhook-endpoints', {
+      method: 'POST',
+      body: JSON.stringify({ connectionId }),
+    });
+  }
+
+  /**
+   * Rotate the secret for a webhook endpoint.
+   */
+  async rotateWebhookSecret(
+    endpointId: string,
+    gracePeriodMs?: number,
+  ): Promise<{ newSecret: string }> {
+    return this.request(`/webhook-endpoints/${endpointId}/rotate-secret`, {
+      method: 'PUT',
+      body: JSON.stringify({ gracePeriodMs }),
+    });
+  }
+
+  /**
+   * Update the IP allowlist for a webhook endpoint.
+   */
+  async updateWebhookIpAllowlist(
+    endpointId: string,
+    cidrs: string[],
+  ): Promise<void> {
+    return this.request(`/webhook-endpoints/${endpointId}/ip-allowlist`, {
+      method: 'PUT',
+      body: JSON.stringify({ cidrs }),
+    });
+  }
+
+  /**
+   * Send a test webhook to an endpoint.
+   */
+  async sendTestWebhook(
+    endpointId: string,
+  ): Promise<{ success: boolean; error?: string; processingTimeMs: number }> {
+    return this.request(`/webhook-endpoints/${endpointId}/test`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Get delivery stats for a webhook endpoint.
+   */
+  async getWebhookDeliveryStats(endpointId: string): Promise<IApiWebhookDeliveryStatsDTO> {
+    return this.request(`/webhook-endpoints/${endpointId}/stats`);
+  }
+
+  // -- Provider Catalog (Expansion) ------------------------------------------
+
+  /**
+   * Get the full provider catalog with optional filters.
+   */
+  async getProviderCatalog(filters?: {
+    category?: string;
+    authType?: string;
+    supportsWebhooks?: boolean;
+    searchQuery?: string;
+  }): Promise<IApiProviderDisplayInfoDTO[]> {
+    const params = new URLSearchParams();
+    if (filters?.category) params.set('category', filters.category);
+    if (filters?.authType) params.set('authType', filters.authType);
+    if (filters?.supportsWebhooks !== undefined) params.set('supportsWebhooks', String(filters.supportsWebhooks));
+    if (filters?.searchQuery) params.set('q', filters.searchQuery);
+    const qs = params.toString();
+    return this.request(`/canary/providers/catalog${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Get recommended providers from the catalog.
+   */
+  async getRecommendedProviders(): Promise<IApiProviderDisplayInfoDTO[]> {
+    return this.request('/canary/providers/catalog/recommended');
   }
 }
 
