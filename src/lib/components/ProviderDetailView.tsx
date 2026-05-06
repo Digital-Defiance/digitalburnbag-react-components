@@ -6,6 +6,7 @@ import type {
 } from '@brightchain/digitalburnbag-lib';
 import { DigitalBurnbagStrings } from '@brightchain/digitalburnbag-lib';
 import { useI18n } from '@digitaldefiance/express-suite-react-components';
+import { formatDateWithBD } from '../utils/formatBrightDate';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import {
   Box,
@@ -125,7 +126,7 @@ export function ProviderDetailView({
       ? statusHistory
       : statusHistory.filter((e) => e.signalType === signalFilter);
 
-  const formatTime = (dateStr: string) => new Date(dateStr).toLocaleString();
+  const formatTime = (dateStr: string) => formatDateWithBD(dateStr);
 
   // Fetch analytics data when date range changes or on mount
   const fetchAnalytics = useCallback(
@@ -194,7 +195,7 @@ export function ProviderDetailView({
       });
       setDrillDownEntries(entries);
       setDrillDownLabel(
-        `${new Date(bucket.bucketStart).toLocaleString()} — ${new Date(bucket.bucketEnd).toLocaleString()}`,
+        `${formatDateWithBD(bucket.bucketStart)} — ${formatDateWithBD(bucket.bucketEnd)}`,
       );
       setDrillDownOpen(true);
     },

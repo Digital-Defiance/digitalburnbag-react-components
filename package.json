@@ -14,6 +14,7 @@
   },
   "peerDependencies": {
     "@awesome.me/kit-a20d532681": "^1.0.23",
+    "@brightchain/brightchain-lib": ">=0.31.0",
     "@emotion/react": ">=11.0.0",
     "@emotion/styled": ">=11.0.0",
     "@fortawesome/fontawesome-svg-core": "^7.2.0",

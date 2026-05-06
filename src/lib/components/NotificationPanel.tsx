@@ -1,5 +1,6 @@
 import { DigitalBurnbagStrings } from '@brightchain/digitalburnbag-lib';
 import { useI18n } from '@digitaldefiance/express-suite-react-components';
+import { formatDateWithBD } from '../utils/formatBrightDate';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import {
   Badge,
@@ -83,7 +84,7 @@ export function NotificationPanel({
                 >
                   <ListItemText
                     primary={n.message}
-                    secondary={new Date(n.timestamp).toLocaleString()}
+                    secondary={formatDateWithBD(n.timestamp)}
                   />
                 </ListItem>
               ))}

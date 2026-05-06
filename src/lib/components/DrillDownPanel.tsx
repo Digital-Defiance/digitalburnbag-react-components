@@ -9,6 +9,7 @@ import {
   ListItemText,
   Typography,
 } from '@mui/material';
+import { formatDateWithBD } from '../utils/formatBrightDate';
 import {
   getSignalTypeColor,
   getSignalTypeLabel,
@@ -38,7 +39,7 @@ function EntryDetail({ entry }: { entry: IStatusHistoryEntryDTO }) {
           size="small"
         />
         <Typography variant="caption" color="text.secondary">
-          {new Date(entry.timestamp).toLocaleString()}
+          {formatDateWithBD(entry.timestamp)}
         </Typography>
       </Box>
       <Typography variant="body2">

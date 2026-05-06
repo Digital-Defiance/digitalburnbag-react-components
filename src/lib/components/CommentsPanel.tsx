@@ -1,3 +1,4 @@
+import { formatDateWithBD } from '../utils/formatBrightDate';
 import CheckIcon from '@mui/icons-material/Check';
 import ReplyIcon from '@mui/icons-material/Reply';
 import {
@@ -63,7 +64,7 @@ export function CommentsPanel({
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Typography variant="subtitle2">{comment.authorName}</Typography>
             <Typography variant="caption" color="text.secondary">
-              {new Date(comment.createdAt).toLocaleString()}
+              {formatDateWithBD(comment.createdAt)}
             </Typography>
             {comment.resolved && (
               <Typography variant="caption" color="success.main">

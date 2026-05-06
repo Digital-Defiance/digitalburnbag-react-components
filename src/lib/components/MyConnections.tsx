@@ -1,5 +1,6 @@
 import { DigitalBurnbagStrings } from '@brightchain/digitalburnbag-lib';
 import { useI18n } from '@digitaldefiance/express-suite-react-components';
+import { formatDateWithBD } from '../utils/formatBrightDate';
 import AddIcon from '@mui/icons-material/Add';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -87,8 +88,7 @@ function ConnectionCard({
 
   const formatTime = (dateStr?: string) => {
     if (!dateStr) return t(DigitalBurnbagStrings.Provider_NeverChecked);
-    const date = new Date(dateStr);
-    return date.toLocaleString();
+    return formatDateWithBD(dateStr);
   };
 
   return (
@@ -262,7 +262,7 @@ function SummaryCard({
             <Typography variant="caption" color="text.secondary">
               {t(DigitalBurnbagStrings.Summary_LastHeartbeat).replace(
                 '{time}',
-                new Date(summary.lastHeartbeatAt).toLocaleString(),
+                formatDateWithBD(summary.lastHeartbeatAt),
               )}
             </Typography>
           )}

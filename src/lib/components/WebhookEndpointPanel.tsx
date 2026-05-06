@@ -24,6 +24,8 @@ import {
   Typography,
 } from '@mui/material';
 import { useCallback, useState } from 'react';
+import { formatDateWithBD } from '../utils/formatBrightDate';
+import { toBrightDateString } from '@brightchain/brightchain-lib';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,8 +81,7 @@ export interface IWebhookEndpointPanelProps {
 
 function formatTimestamp(iso?: string): string {
   if (!iso) return 'Never';
-  const d = new Date(iso);
-  return d.toLocaleString();
+  return formatDateWithBD(iso);
 }
 
 function successRate(stats: IWebhookDeliveryStats): string {
@@ -187,7 +188,7 @@ function DeliveryChart({ data }: { data: IDeliveryDataPoint[] }) {
           return (
             <Tooltip
               key={idx}
-              title={`${new Date(point.timestamp).toLocaleDateString()}: ${point.successful} ok, ${point.failed} failed`}
+              title={`${new Date(point.timestamp).toLocaleDateString()} (BD ${toBrightDateString(point.timestamp, 3)}): ${point.successful} ok, ${point.failed} failed`}
             >
               <Box
                 data-testid={`chart-bar-${idx}`}

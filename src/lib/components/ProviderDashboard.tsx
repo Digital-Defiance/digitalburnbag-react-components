@@ -4,6 +4,7 @@ import type {
 } from '@brightchain/digitalburnbag-lib';
 import { DigitalBurnbagStrings } from '@brightchain/digitalburnbag-lib';
 import { useI18n } from '@digitaldefiance/express-suite-react-components';
+import { formatDateWithBD } from '../utils/formatBrightDate';
 import AddIcon from '@mui/icons-material/Add';
 import {
   Alert,
@@ -125,7 +126,7 @@ function DashboardConnectionCard({
 }) {
   const formatTime = (dateStr?: string) => {
     if (!dateStr) return 'Never';
-    return new Date(dateStr).toLocaleString();
+    return formatDateWithBD(dateStr);
   };
 
   return (

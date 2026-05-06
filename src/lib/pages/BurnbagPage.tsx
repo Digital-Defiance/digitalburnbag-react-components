@@ -12,6 +12,7 @@ import {
   type IUploadCommitResultDTO,
 } from '@brightchain/digitalburnbag-lib';
 import { useI18n } from '@digitaldefiance/express-suite-react-components';
+import { formatDateWithBD } from '../utils/formatBrightDate';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import BarChartIcon from '@mui/icons-material/BarChart';
@@ -2283,21 +2284,15 @@ export const BurnbagPage: React.FC<IBurnbagPageProps> = ({
                       ['Duration', `${storageContractData.committedDays} days`],
                       [
                         'Created',
-                        new Date(
-                          storageContractData.createdAt,
-                        ).toLocaleString(),
+                        formatDateWithBD(storageContractData.createdAt),
                       ],
                       [
                         'Expires',
-                        new Date(
-                          storageContractData.expiresAt,
-                        ).toLocaleString(),
+                        formatDateWithBD(storageContractData.expiresAt),
                       ],
                       [
                         'Last Settled',
-                        new Date(
-                          storageContractData.lastSettledAt,
-                        ).toLocaleString(),
+                        formatDateWithBD(storageContractData.lastSettledAt),
                       ],
                       [
                         'Upfront Cost',

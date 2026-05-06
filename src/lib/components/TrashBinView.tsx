@@ -1,4 +1,5 @@
 import { DigitalBurnbagStrings } from '@brightchain/digitalburnbag-lib';
+import { toBrightDateString } from '@brightchain/brightchain-lib';
 import { useI18n } from '@digitaldefiance/express-suite-react-components';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import FolderIcon from '@mui/icons-material/Folder';
@@ -43,10 +44,12 @@ export interface ITrashBinViewProps {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Format an ISO date to a locale-friendly string. */
+/** Format an ISO date to a locale-friendly string with BrightDate. */
 function formatDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleString();
+    const localeStr = new Date(iso).toLocaleString();
+    const bd = toBrightDateString(iso, 3);
+    return bd ? `${localeStr} (BD ${bd})` : localeStr;
   } catch {
     return iso;
   }

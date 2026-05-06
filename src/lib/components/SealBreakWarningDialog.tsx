@@ -8,6 +8,7 @@
  *
  * The caller decides what "proceed" means via the `onConfirm` callback.
  */
+import { formatDateWithBD } from '../utils/formatBrightDate';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -39,7 +40,7 @@ export function SealBreakWarningDialog({
   onConfirm,
   onCancel,
 }: ISealBreakWarningDialogProps) {
-  const sealDate = sealedAt ? new Date(sealedAt).toLocaleString() : undefined;
+  const sealDate = sealedAt ? formatDateWithBD(sealedAt) : undefined;
 
   return (
     <Dialog open={open} onClose={onCancel} maxWidth="sm" fullWidth>

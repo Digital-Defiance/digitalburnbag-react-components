@@ -1,5 +1,6 @@
 import { DigitalBurnbagStrings } from '@brightchain/digitalburnbag-lib';
 import { useI18n } from '@digitaldefiance/express-suite-react-components';
+import { formatDateWithBD } from '../utils/formatBrightDate';
 import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import FolderIcon from '@mui/icons-material/Folder';
@@ -115,11 +116,7 @@ function formatBytes(bytes: number): string {
 }
 
 function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return iso;
-  }
+  return formatDateWithBD(iso);
 }
 
 // ---------------------------------------------------------------------------

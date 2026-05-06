@@ -11,6 +11,7 @@
  */
 import { DigitalBurnbagStrings } from '@brightchain/digitalburnbag-lib';
 import { useI18n } from '@digitaldefiance/express-suite-react-components';
+import { formatDateOnlyWithBD } from '../utils/formatBrightDate';
 import AddIcon from '@mui/icons-material/Add';
 import LinkIcon from '@mui/icons-material/Link';
 import LockIcon from '@mui/icons-material/Lock';
@@ -143,7 +144,7 @@ function SealChip({
 
   const pristine = !sealStatus || sealStatus.allPristine;
   const tooltip = pristine
-    ? `Sealed${sealedAt ? ` on ${new Date(sealedAt).toLocaleDateString()}` : ''} — all files pristine`
+    ? `Sealed${sealedAt ? ` on ${formatDateOnlyWithBD(sealedAt)}` : ''} — all files pristine`
     : `Seal broken — ${sealStatus?.accessedCount ?? 0} file(s) accessed`;
 
   return (
